@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import CoreLocation
+import _MapKit_SwiftUI
 
 // Step 1: Define a custom wrapper for CLLocationCoordinate2D that conforms to Equatable
 struct EquatableLocation: Equatable {
@@ -37,30 +38,47 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
 // Step 3: Define the ContentView struct
 struct ContentView: View {
     @StateObject private var locationManager = LocationManager()
+    @StateObject private var progressManager = CountyProgressManager()
     @State private var region = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060),
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
     )
     @State private var overlays: [MKOverlay] = []
-    @State private var annotations: [MKAnnotation] = []
+    @State private var annotations: [CountyAnnotation] = []
+    @State private var selectedCounty: CountyProgress?
+    @State private var showingProgress = false
 
     var body: some View {
-        MapView(region: $region, overlays: $overlays, annotations: $annotations)
-            .edgesIgnoringSafeArea(.all)
-            .overlay(
-                MapUserLocationButton()
-                    .padding()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-            )
-            .onAppear {
-                loadCountyBoundaries()
-            }
-            .onChange(of: locationManager.userLocation) { newLocation in
-                if let location = newLocation {
-                    updateRegion(for: location.coordinate)
-                    updateCurrentCounty(for: location.coordinate)
+        ZStack {
+            MapView(region: $region, 
+                   overlays: $overlays, 
+                   annotations: $annotations,
+                   selectedCounty: $selectedCounty,
+                   progressManager: progressManager)
+                .edgesIgnoringSafeArea(.all)
+                .overlay(
+                    UserLocationButton(region: $region, userLocation: locationManager.userLocation)
+                )
+            
+            if let county = selectedCounty {
+                VStack {
+                    Spacer()
+                    CountyProgressView(county: county)
+                        .transition(.move(edge: .bottom))
+                        .padding()
                 }
             }
+        }
+        .onAppear {
+            loadCountyBoundaries()
+        }
+        .onChange(of: locationManager.userLocation) { newLocation in
+            if let location = newLocation {
+                updateRegion(for: location.coordinate)
+                updateCurrentCounty(for: location.coordinate)
+                progressManager.updateVisitedCells(for: location.coordinate)
+            }
+        }
     }
 
     // Step 4: Load county boundaries from a GeoJSON file
@@ -83,14 +101,16 @@ struct ContentView: View {
             print("Successfully decoded GeoJSON with \(features.count) features")
             
             var allPolygons: [MKPolygon] = []
-            var countyLabels: [CountyLabel] = []
+            var countyAnnotations: [CountyAnnotation] = []
             
             for feature in features {
                 guard let geoFeature = feature as? MKGeoJSONFeature,
                       let geometry = geoFeature.geometry.first,
                       let properties = geoFeature.properties,
                       let propertyData = try? JSONSerialization.jsonObject(with: properties) as? [String: Any],
-                      let countyName = propertyData["NAME"] as? String else {
+                      let countyName = propertyData["NAME"] as? String,
+                      let stateId = propertyData["STATEFP"] as? String,
+                      let geoid = propertyData["GEOID"] as? String else {
                     continue
                 }
                 
@@ -103,23 +123,30 @@ struct ContentView: View {
                 
                 allPolygons.append(contentsOf: polygonsForFeature)
                 
-                // Create label for the county
+                // Initialize county progress
                 if let polygon = polygonsForFeature.first {
-                    let center = polygon.coordinate
-                    let label = CountyLabel(coordinate: center, title: countyName)
-                    countyLabels.append(label)
+                    progressManager.initializeCounty(
+                        geoid: geoid,
+                        name: countyName,
+                        state: stateId,
+                        polygon: polygon
+                    )
+                    
+                    let annotation = CountyAnnotation(
+                        coordinate: polygon.coordinate,
+                        title: countyName,
+                        geoid: geoid
+                    )
+                    countyAnnotations.append(annotation)
                 }
             }
             
             print("Created \(allPolygons.count) polygon overlays")
             overlays = allPolygons
-            annotations = countyLabels
+            annotations = countyAnnotations
             
         } catch {
             print("❌ Error processing GeoJSON: \(error)")
-            if let dataString = try? String(contentsOf: url, encoding: .utf8) {
-                print("First 200 characters of file: \(String(dataString.prefix(200)))")
-            }
         }
     }
 
@@ -152,7 +179,48 @@ struct ContentView: View {
 struct MapView: UIViewRepresentable {
     @Binding var region: MKCoordinateRegion
     @Binding var overlays: [MKOverlay]
-    @Binding var annotations: [MKAnnotation]
+    @Binding var annotations: [CountyAnnotation]
+    @Binding var selectedCounty: CountyProgress?
+    let progressManager: CountyProgressManager
+    
+    private var gridOverlays: [MKOverlay] {
+        guard let county = selectedCounty else {
+            print("No county selected for grid cells")
+            return []
+        }
+        
+        print("Creating grid cells for \(county.countyName) county")
+        print("Number of grid cells: \(county.gridCells.count)")
+        
+        return county.gridCells.map { cell in
+            let center = CLLocationCoordinate2D(
+                latitude: cell.coordinate.latitude,
+                longitude: cell.coordinate.longitude
+            )
+            
+            // Create a small square around the cell center
+            let squareSize = 0.005 // Increased size for visibility
+            let topLeft = CLLocationCoordinate2D(
+                latitude: center.latitude + squareSize,
+                longitude: center.longitude - squareSize
+            )
+            let topRight = CLLocationCoordinate2D(
+                latitude: center.latitude + squareSize,
+                longitude: center.longitude + squareSize
+            )
+            let bottomLeft = CLLocationCoordinate2D(
+                latitude: center.latitude - squareSize,
+                longitude: center.longitude - squareSize
+            )
+            let bottomRight = CLLocationCoordinate2D(
+                latitude: center.latitude - squareSize,
+                longitude: center.longitude + squareSize
+            )
+            
+            let coordinates = [topLeft, topRight, bottomRight, bottomLeft]
+            return MKPolygon(coordinates: coordinates, count: 4)
+        }
+    }
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
@@ -166,7 +234,19 @@ struct MapView: UIViewRepresentable {
         mapView.setRegion(region, animated: true)
         mapView.removeOverlays(mapView.overlays)
         mapView.removeAnnotations(mapView.annotations)
+        
+        // First add county overlays
+        print("Adding \(overlays.count) county overlays")
         mapView.addOverlays(overlays)
+        
+        // Only add grid cells if a county is selected
+        if selectedCounty != nil {
+            let cells = gridOverlays
+            print("Adding \(cells.count) grid cell overlays")
+            mapView.addOverlays(cells)
+        }
+        
+        print("Adding \(annotations.count) annotations")
         mapView.addAnnotations(annotations)
     }
 
@@ -184,12 +264,43 @@ struct MapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let polygon = overlay as? MKPolygon {
                 let renderer = MKPolygonRenderer(polygon: polygon)
-                renderer.strokeColor = .black
-                renderer.lineWidth = 1
-                renderer.fillColor = .clear
+                
+                // If this is a grid cell (smaller polygon)
+                if polygon.pointCount == 4 {
+                    // Make grid cells more visible
+                    renderer.fillColor = UIColor.red.withAlphaComponent(0.3)  // More opacity
+                    renderer.strokeColor = UIColor.black.withAlphaComponent(0.5)  // More visible borders
+                    renderer.lineWidth = 1.0  // Thicker borders
+                    
+                    // If we have visited data, update the color
+                    if let selectedCounty = parent.selectedCounty {
+                        let center = polygon.coordinate
+                        let cellCoordinate = Coordinate(latitude: center.latitude, longitude: center.longitude)
+                        
+                        if selectedCounty.isCellVisited(cellCoordinate) {
+                            renderer.fillColor = UIColor.green.withAlphaComponent(0.4)
+                        }
+                    }
+                } else {
+                    // County border
+                    renderer.strokeColor = .black
+                    renderer.lineWidth = 1
+                    renderer.fillColor = .clear
+                }
                 return renderer
             }
             return MKOverlayRenderer(overlay: overlay)
+        }
+        
+        func mapView(_ mapView: MKMapView, didSelect annotation: MKAnnotation) {
+            guard let countyAnnotation = annotation as? CountyAnnotation else { return }
+            if let county = parent.progressManager.countyProgress[countyAnnotation.geoid] {
+                parent.selectedCounty = county
+            }
+        }
+        
+        func mapView(_ mapView: MKMapView, didDeselect annotation: MKAnnotation) {
+            parent.selectedCounty = nil
         }
     }
 }
@@ -203,5 +314,62 @@ class CountyLabel: NSObject, MKAnnotation {
         self.coordinate = coordinate
         self.title = title
         super.init()
+    }
+}
+
+// Add CountyProgressView
+struct CountyProgressView: View {
+    let county: CountyProgress
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            Text("\(county.countyName) County")
+                .font(.headline)
+            Text("\(county.visitedCellCount)/\(county.totalCellCount) cells visited")
+                .font(.subheadline)
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(10)
+        .shadow(radius: 5)
+    }
+}
+
+// Update CountyAnnotation
+class CountyAnnotation: NSObject, MKAnnotation {
+    let coordinate: CLLocationCoordinate2D
+    let title: String?
+    let geoid: String
+    
+    init(coordinate: CLLocationCoordinate2D, title: String, geoid: String) {
+        self.coordinate = coordinate
+        self.title = title
+        self.geoid = geoid
+        super.init()
+    }
+}
+
+// Add UserLocationButton view before ContentView
+struct UserLocationButton: View {
+    @Binding var region: MKCoordinateRegion
+    let userLocation: EquatableLocation?
+    
+    var body: some View {
+        Button(action: {
+            if let location = userLocation {
+                withAnimation {
+                    region.center = location.coordinate
+                    region.span = MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                }
+            }
+        }) {
+            Image(systemName: "location.fill")
+                .padding(10)
+                .background(Color(.systemBackground))
+                .clipShape(Circle())
+                .shadow(radius: 2)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
     }
 }
