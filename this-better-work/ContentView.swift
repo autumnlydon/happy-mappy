@@ -342,42 +342,35 @@ struct MapView: UIViewRepresentable {
     let progressManager: CountyProgressManager
     
     private var gridOverlays: [MKOverlay] {
-        guard let county = selectedCounty else {
-            print("No county selected for grid cells")
-            return []
-        }
+        guard let county = selectedCounty else { return [] }
         
-        print("Creating grid cells for \(county.countyName) county")
-        print("Number of grid cells: \(county.gridCells.count)")
+        var existingCells = Set<String>()
+        var overlays: [MKPolygon] = []
         
-        return county.gridCells.map { cell in
+        for cell in county.gridCells {
+            let identifier = "\(cell.coordinate.latitude),\(cell.coordinate.longitude)"
+            guard !existingCells.contains(identifier) else { continue }
+            existingCells.insert(identifier)
+            
             let center = CLLocationCoordinate2D(
                 latitude: cell.coordinate.latitude,
                 longitude: cell.coordinate.longitude
             )
             
-            // Create a small square around the cell center
-            let squareSize = 0.005 // Increased size for visibility
-            let topLeft = CLLocationCoordinate2D(
-                latitude: center.latitude + squareSize,
-                longitude: center.longitude - squareSize
-            )
-            let topRight = CLLocationCoordinate2D(
-                latitude: center.latitude + squareSize,
-                longitude: center.longitude + squareSize
-            )
-            let bottomLeft = CLLocationCoordinate2D(
-                latitude: center.latitude - squareSize,
-                longitude: center.longitude - squareSize
-            )
-            let bottomRight = CLLocationCoordinate2D(
-                latitude: center.latitude - squareSize,
-                longitude: center.longitude + squareSize
-            )
+            let squareSize = 0.005
+            let coordinates = [
+                CLLocationCoordinate2D(latitude: center.latitude + squareSize, longitude: center.longitude - squareSize),
+                CLLocationCoordinate2D(latitude: center.latitude + squareSize, longitude: center.longitude + squareSize),
+                CLLocationCoordinate2D(latitude: center.latitude - squareSize, longitude: center.longitude + squareSize),
+                CLLocationCoordinate2D(latitude: center.latitude - squareSize, longitude: center.longitude - squareSize)
+            ]
             
-            let coordinates = [topLeft, topRight, bottomRight, bottomLeft]
-            return MKPolygon(coordinates: coordinates, count: 4)
+            let polygon = MKPolygon(coordinates: coordinates, count: 4)
+            polygon.title = "visited:\(cell.isVisited)"
+            overlays.append(polygon)
         }
+        
+        return overlays
     }
 
     func makeUIView(context: Context) -> MKMapView {
@@ -385,27 +378,48 @@ struct MapView: UIViewRepresentable {
         mapView.delegate = context.coordinator
         mapView.showsUserLocation = true
         mapView.setRegion(region, animated: false)
+        
+        // Add tap gesture recognizer
+        let tapGesture = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleTap(_:))
+        )
+        mapView.addGestureRecognizer(tapGesture)
+        
         return mapView
     }
 
     func updateUIView(_ mapView: MKMapView, context: Context) {
         mapView.setRegion(region, animated: true)
-        mapView.removeOverlays(mapView.overlays)
-        mapView.removeAnnotations(mapView.annotations)
         
-        // First add county overlays
-        print("Adding \(overlays.count) county overlays")
-        mapView.addOverlays(overlays)
+        // Only update overlays if they've changed
+        let currentOverlays = Set(mapView.overlays.map { $0.hash })
+        let newOverlays = Set(overlays.map { $0.hash })
         
-        // Only add grid cells if a county is selected
-        if selectedCounty != nil {
-            let cells = gridOverlays
-            print("Adding \(cells.count) grid cell overlays")
-            mapView.addOverlays(cells)
+        if currentOverlays != newOverlays {
+            mapView.removeOverlays(mapView.overlays)
+            mapView.addOverlays(overlays)
         }
         
-        print("Adding \(annotations.count) annotations")
-        mapView.addAnnotations(annotations)
+        // Only add grid cells if a county is selected and they're not already present
+        if selectedCounty != nil {
+            let cells = gridOverlays
+            let existingGridCells = mapView.overlays.filter { $0 is MKPolygon && ($0 as! MKPolygon).pointCount == 4 }
+            
+            if existingGridCells.count != cells.count {
+                mapView.removeOverlays(existingGridCells)
+                mapView.addOverlays(cells)
+            }
+        }
+        
+        // Update annotations only if they've changed
+        let currentAnnotations = Set(mapView.annotations.compactMap { ($0 as? CountyAnnotation)?.geoid })
+        let newAnnotations = Set(annotations.map { $0.geoid })
+        
+        if currentAnnotations != newAnnotations {
+            mapView.removeAnnotations(mapView.annotations)
+            mapView.addAnnotations(annotations)
+        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -417,6 +431,7 @@ struct MapView: UIViewRepresentable {
 
         init(_ parent: MapView) {
             self.parent = parent
+            super.init()
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
@@ -425,19 +440,15 @@ struct MapView: UIViewRepresentable {
                 
                 // If this is a grid cell (smaller polygon)
                 if polygon.pointCount == 4 {
-                    // Make grid cells more visible
-                    renderer.fillColor = UIColor.red.withAlphaComponent(0.3)  // More opacity
-                    renderer.strokeColor = UIColor.black.withAlphaComponent(0.5)  // More visible borders
-                    renderer.lineWidth = 1.0  // Thicker borders
+                    // Default color for unvisited cells
+                    renderer.fillColor = UIColor.red.withAlphaComponent(0.1)
+                    renderer.strokeColor = UIColor.black.withAlphaComponent(0.3)
+                    renderer.lineWidth = 1.0
                     
-                    // If we have visited data, update the color
-                    if let selectedCounty = parent.selectedCounty {
-                        let center = polygon.coordinate
-                        let cellCoordinate = Coordinate(latitude: center.latitude, longitude: center.longitude)
-                        
-                        if selectedCounty.isCellVisited(cellCoordinate) {
-                            renderer.fillColor = UIColor.green.withAlphaComponent(0.4)
-                        }
+                    // Only check visited status if we have associated data
+                    if let title = polygon.title,
+                       title == "visited:true" {
+                        renderer.fillColor = UIColor.green.withAlphaComponent(0.5)
                     }
                 } else {
                     // County border
@@ -452,13 +463,76 @@ struct MapView: UIViewRepresentable {
         
         func mapView(_ mapView: MKMapView, didSelect annotation: MKAnnotation) {
             guard let countyAnnotation = annotation as? CountyAnnotation else { return }
+            print("Selected county with GEOID: \(countyAnnotation.geoid)")
             if let county = parent.progressManager.countyProgress[countyAnnotation.geoid] {
+                print("Found county: \(county.countyName)")
+                print("Visited cell count: \(county.visitedCellCount)")
+                print("Total cell count: \(county.totalCellCount)")
                 parent.selectedCounty = county
+            } else {
+                print("⚠️ No county found in progress manager for GEOID: \(countyAnnotation.geoid)")
             }
         }
         
         func mapView(_ mapView: MKMapView, didDeselect annotation: MKAnnotation) {
             parent.selectedCounty = nil
+        }
+
+        // Add tap gesture handling
+        @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            let mapView = gesture.view as! MKMapView
+            let point = gesture.location(in: mapView)
+            
+            guard let selectedCounty = parent.selectedCounty else { return }
+            
+            // Convert tap point to coordinate
+            let coordinate = mapView.convert(point, toCoordinateFrom: mapView)
+            
+            // Check if tap is within any grid cell
+            for overlay in mapView.overlays {
+                guard let polygon = overlay as? MKPolygon,
+                      polygon.pointCount == 4 else { continue }
+                
+                let renderer = MKPolygonRenderer(polygon: polygon)
+                let pointInRenderer = renderer.point(for: MKMapPoint(coordinate))
+                
+                if renderer.path.contains(pointInRenderer) {
+                    // Found the tapped cell, mark it as visited
+                    let cellCoordinate = Coordinate(
+                        latitude: polygon.coordinate.latitude,
+                        longitude: polygon.coordinate.longitude
+                    )
+                    
+                    // Mark the cell as visited using the new method
+                    parent.progressManager.markCellAsVisited(
+                        in: selectedCounty.id,
+                        at: cellCoordinate
+                    )
+                    
+                    // Force a refresh of the entire grid by updating the selected county
+                    if let updatedCounty = parent.progressManager.countyProgress[selectedCounty.id] {
+                        parent.selectedCounty = updatedCounty
+                        
+                        // Force a complete refresh of the map view
+                        DispatchQueue.main.async {
+                            mapView.removeOverlays(mapView.overlays)
+                            
+                            // Re-add county borders
+                            for overlay in self.parent.overlays {
+                                if let polygon = overlay as? MKPolygon, polygon.pointCount > 4 {
+                                    mapView.addOverlay(polygon)
+                                }
+                            }
+                            
+                            // Re-add grid cells
+                            if let cells = self.parent.gridOverlays as? [MKPolygon] {
+                                mapView.addOverlays(cells)
+                            }
+                        }
+                    }
+                    break
+                }
+            }
         }
     }
 }

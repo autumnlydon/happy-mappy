@@ -26,6 +26,29 @@ struct CountyProgress: Identifiable, Codable {
         self.stateName = stateName
         self.visitedCellCoordinates = visitedCellCoordinates
         self.gridCells = gridCells
+        
+        // Update the isVisited status of grid cells based on visitedCellCoordinates
+        // Create a lookup set of rounded coordinates for faster checking
+        let roundedVisitedCoords = visitedCellCoordinates.map { coord -> String in
+            let components = coord.components(separatedBy: ",")
+            if components.count == 2,
+               let lat = Double(components[0]),
+               let lon = Double(components[1]) {
+                let roundedLat = round(lat * 1000000) / 1000000
+                let roundedLon = round(lon * 1000000) / 1000000
+                return "\(roundedLat),\(roundedLon)"
+            }
+            return coord
+        }.reduce(into: Set<String>()) { $0.insert($1) }
+        
+        // Update grid cells in a single pass
+        for i in 0..<self.gridCells.count {
+            let coordinate = self.gridCells[i].coordinate
+            let roundedLat = round(coordinate.latitude * 1000000) / 1000000
+            let roundedLon = round(coordinate.longitude * 1000000) / 1000000
+            let coordString = "\(roundedLat),\(roundedLon)"
+            self.gridCells[i].isVisited = roundedVisitedCoords.contains(coordString)
+        }
     }
     
     var visitedCellCount: Int {
@@ -37,11 +60,30 @@ struct CountyProgress: Identifiable, Codable {
     }
     
     mutating func markCellAsVisited(_ coordinate: Coordinate) {
-        visitedCellCoordinates.insert("\(coordinate.latitude),\(coordinate.longitude)")
+        let roundedLat = round(coordinate.latitude * 1000000) / 1000000
+        let roundedLon = round(coordinate.longitude * 1000000) / 1000000
+        let coordString = "\(roundedLat),\(roundedLon)"
+        visitedCellCoordinates.insert(coordString)
+        
+        // Update the corresponding grid cell's isVisited status
+        for i in 0..<gridCells.count {
+            let cell = gridCells[i]
+            let cellLat = round(cell.coordinate.latitude * 1000000) / 1000000
+            let cellLon = round(cell.coordinate.longitude * 1000000) / 1000000
+            let cellCoordString = "\(cellLat),\(cellLon)"
+            
+            if cellCoordString == coordString {
+                gridCells[i].isVisited = true
+                break
+            }
+        }
     }
     
     func isCellVisited(_ coordinate: Coordinate) -> Bool {
-        visitedCellCoordinates.contains("\(coordinate.latitude),\(coordinate.longitude)")
+        let roundedLat = round(coordinate.latitude * 1000000) / 1000000
+        let roundedLon = round(coordinate.longitude * 1000000) / 1000000
+        let coordString = "\(roundedLat),\(roundedLon)"
+        return visitedCellCoordinates.contains(coordString)
     }
 }
 
@@ -90,9 +132,14 @@ class CountyProgressManager: ObservableObject {
                 let renderer = MKPolygonRenderer(polygon: polygon)
                 let point = renderer.point(for: mapPoint)
                 if renderer.path.contains(point) {
+                    // Round coordinates to 6 decimal places for consistency
+                    let roundedLat = round(coordinate.latitude * 1000000) / 1000000
+                    let roundedLon = round(coordinate.longitude * 1000000) / 1000000
+                    let coordString = "\(roundedLat),\(roundedLon)"
+                    
                     cells.append(GridCell(
                         id: UUID(),
-                        coordinate: Coordinate(latitude: coordinate.latitude, longitude: coordinate.longitude),
+                        coordinate: Coordinate(latitude: roundedLat, longitude: roundedLon),
                         isVisited: false
                     ))
                 }
@@ -104,8 +151,7 @@ class CountyProgressManager: ObservableObject {
     
     func initializeCounty(geoid: String, name: String, state: String, polygon: MKPolygon) {
         let cells = generateGridCells(for: polygon)
-        var progress = CountyProgress(id: geoid, countyName: name, stateName: state, visitedCellCoordinates: [], gridCells: [])
-        progress.gridCells = cells
+        var progress = CountyProgress(id: geoid, countyName: name, stateName: state, visitedCellCoordinates: [], gridCells: cells)
         
         // Restore visited state
         if let visited = visitedCells[geoid] {
@@ -145,7 +191,34 @@ class CountyProgressManager: ObservableObject {
             
             if hasChanges {
                 countyProgress[geoid] = county
+                objectWillChange.send()
             }
         }
+    }
+    
+    func markCellAsVisited(in countyId: String, at coordinate: Coordinate) {
+        print("Attempting to mark cell as visited in county \(countyId)")
+        guard var county = countyProgress[countyId] else {
+            print("⚠️ No county found with ID \(countyId)")
+            return
+        }
+        
+        // Mark the cell as visited in the county
+        county.markCellAsVisited(coordinate)
+        
+        // Update the visited cells storage
+        if visitedCells[countyId] == nil {
+            visitedCells[countyId] = []
+            print("Created new visited cells set for county \(countyId)")
+        }
+        visitedCells[countyId]?.insert("\(coordinate.latitude),\(coordinate.longitude)")
+        print("Updated visited cells for county \(countyId): \(visitedCells[countyId] ?? [])")
+        
+        // Update the county progress
+        countyProgress[countyId] = county
+        
+        // Notify observers
+        objectWillChange.send()
+        print("County progress updated and observers notified")
     }
 } 
