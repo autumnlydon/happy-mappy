@@ -39,6 +39,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
 struct HomePage: View {
     @Binding var showMap: Bool
     @StateObject private var userState = UserState.shared
+    @ObservedObject var progressManager: CountyProgressManager
     @State private var email = ""
     @State private var password = ""
     @State private var isLoading = false
@@ -104,6 +105,19 @@ struct HomePage: View {
                         .cornerRadius(10)
                 }
                 .padding(.top, 20)
+                
+                NavigationLink(destination: VisitedCountiesView(progressManager: progressManager)) {
+                    Text("Track Exploration")
+                        .font(.headline)
+                        .foregroundColor(.blue)
+                        .padding()
+                        .frame(width: 200)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.blue, lineWidth: 2)
+                        )
+                }
+                .padding(.top, 10)
                 
                 Button("Sign Out") {
                     signOut()
@@ -181,61 +195,76 @@ struct ContentView: View {
     @State private var showingProgress = false
 
     var body: some View {
-        if showMap {
-            // Map View
-            ZStack {
-                MapView(region: $region, 
-                       overlays: $overlays, 
-                       annotations: $annotations,
-                       selectedCounty: $selectedCounty,
-                       progressManager: progressManager)
-                    .edgesIgnoringSafeArea(.all)
-                    .overlay(
-                        UserLocationButton(region: $region, userLocation: locationManager.userLocation)
-                    )
-                
-                if let county = selectedCounty {
-                    VStack {
-                        Spacer()
-                        CountyProgressView(county: county)
-                            .transition(.move(edge: .bottom))
-                            .padding()
-                    }
-                }
-                
-                // Add back button
-                VStack {
-                    Button(action: {
-                        withAnimation {
-                            showMap = false
-                        }
-                    }) {
-                        Image(systemName: "chevron.left")
-                            .font(.title2)
-                            .foregroundColor(.blue)
-                            .padding(10)
-                            .background(Color(.systemBackground))
-                            .clipShape(Circle())
-                            .shadow(radius: 2)
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        NavigationView {
+            if showMap {
+                // Map View
+                ZStack {
+                    MapView(region: $region, 
+                           overlays: $overlays, 
+                           annotations: $annotations,
+                           selectedCounty: $selectedCounty,
+                           progressManager: progressManager)
+                        .edgesIgnoringSafeArea(.all)
+                        .overlay(
+                            UserLocationButton(region: $region, userLocation: locationManager.userLocation)
+                        )
                     
-                    Spacer()
+                    if let county = selectedCounty {
+                        VStack {
+                            Spacer()
+                            CountyProgressView(county: county)
+                                .transition(.move(edge: .bottom))
+                                .padding()
+                        }
+                    }
+                    
+                    // Navigation buttons
+                    VStack {
+                        HStack {
+                            Button(action: {
+                                withAnimation {
+                                    showMap = false
+                                }
+                            }) {
+                                Image(systemName: "chevron.left")
+                                    .font(.title2)
+                                    .foregroundColor(.blue)
+                                    .padding(10)
+                                    .background(Color(.systemBackground))
+                                    .clipShape(Circle())
+                                    .shadow(radius: 2)
+                            }
+                            
+                            Spacer()
+                            
+                            NavigationLink(destination: VisitedCountiesView(progressManager: progressManager)) {
+                                Image(systemName: "list.bullet")
+                                    .font(.title2)
+                                    .foregroundColor(.blue)
+                                    .padding(10)
+                                    .background(Color(.systemBackground))
+                                    .clipShape(Circle())
+                                    .shadow(radius: 2)
+                            }
+                        }
+                        .padding()
+                        
+                        Spacer()
+                    }
                 }
-            }
-            .onAppear {
-                loadCountyBoundaries()
-            }
-            .onChange(of: locationManager.userLocation) { newLocation in
-                if let location = newLocation {
-                    updateCurrentCounty(for: location.coordinate)
-                    progressManager.updateVisitedCells(for: location.coordinate)
+                .onAppear {
+                    loadCountyBoundaries()
                 }
+                .onChange(of: locationManager.userLocation) { newLocation in
+                    if let location = newLocation {
+                        updateCurrentCounty(for: location.coordinate)
+                        progressManager.updateVisitedCells(for: location.coordinate)
+                    }
+                }
+            } else {
+                // Home Page
+                HomePage(showMap: $showMap, progressManager: progressManager)
             }
-        } else {
-            // Home Page
-            HomePage(showMap: $showMap)
         }
     }
 
@@ -602,6 +631,6 @@ struct UserLocationButton: View {
                 .shadow(radius: 2)
         }
         .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }
 }
