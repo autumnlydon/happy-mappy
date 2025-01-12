@@ -36,7 +36,139 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
 }
 
 // Step 3: Define the ContentView struct
+struct HomePage: View {
+    @Binding var showMap: Bool
+    @StateObject private var userState = UserState.shared
+    @State private var email = ""
+    @State private var password = ""
+    @State private var isLoading = false
+    @State private var showError = false
+    @State private var errorMessage = ""
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Welcome to County Explorer")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+            
+            Text("Track your adventures across counties")
+                .font(.title2)
+                .foregroundColor(.gray)
+            
+            Image(systemName: "map.fill")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 100, height: 100)
+                .foregroundColor(.blue)
+                .padding(.vertical, 30)
+            
+            if !userState.isAuthenticated {
+                // Login Form
+                TextField("Email", text: $email)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .autocapitalization(.none)
+                    .padding(.horizontal)
+                
+                SecureField("Password", text: $password)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .padding(.horizontal)
+                
+                HStack(spacing: 20) {
+                    Button("Sign In") {
+                        login()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    
+                    Button("Sign Up") {
+                        signUp()
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .disabled(isLoading)
+            } else {
+                Text("Explore counties, track visited areas,\nand discover new places!")
+                    .multilineTextAlignment(.center)
+                    .padding()
+                
+                Button(action: {
+                    withAnimation {
+                        showMap = true
+                    }
+                }) {
+                    Text("Start Exploring")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding()
+                        .frame(width: 200)
+                        .background(Color.blue)
+                        .cornerRadius(10)
+                }
+                .padding(.top, 20)
+                
+                Button("Sign Out") {
+                    signOut()
+                }
+                .padding(.top)
+            }
+        }
+        .padding()
+        .alert("Error", isPresented: $showError) {
+            Button("OK") { }
+        } message: {
+            Text(errorMessage)
+        }
+    }
+    
+    private func login() {
+        isLoading = true
+        Task {
+            do {
+                try await userState.signIn(email: email, password: password)
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    showError = true
+                }
+            }
+            await MainActor.run {
+                isLoading = false
+            }
+        }
+    }
+    
+    private func signUp() {
+        isLoading = true
+        Task {
+            do {
+                try await userState.signUp(email: email, password: password)
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    showError = true
+                }
+            }
+            await MainActor.run {
+                isLoading = false
+            }
+        }
+    }
+    
+    private func signOut() {
+        Task {
+            do {
+                try await userState.signOut()
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    showError = true
+                }
+            }
+        }
+    }
+}
+
 struct ContentView: View {
+    @State private var showMap = false
     @StateObject private var locationManager = LocationManager()
     @StateObject private var progressManager = CountyProgressManager()
     @State private var region = MKCoordinateRegion(
@@ -49,35 +181,61 @@ struct ContentView: View {
     @State private var showingProgress = false
 
     var body: some View {
-        ZStack {
-            MapView(region: $region, 
-                   overlays: $overlays, 
-                   annotations: $annotations,
-                   selectedCounty: $selectedCounty,
-                   progressManager: progressManager)
-                .edgesIgnoringSafeArea(.all)
-                .overlay(
-                    UserLocationButton(region: $region, userLocation: locationManager.userLocation)
-                )
-            
-            if let county = selectedCounty {
+        if showMap {
+            // Map View
+            ZStack {
+                MapView(region: $region, 
+                       overlays: $overlays, 
+                       annotations: $annotations,
+                       selectedCounty: $selectedCounty,
+                       progressManager: progressManager)
+                    .edgesIgnoringSafeArea(.all)
+                    .overlay(
+                        UserLocationButton(region: $region, userLocation: locationManager.userLocation)
+                    )
+                
+                if let county = selectedCounty {
+                    VStack {
+                        Spacer()
+                        CountyProgressView(county: county)
+                            .transition(.move(edge: .bottom))
+                            .padding()
+                    }
+                }
+                
+                // Add back button
                 VStack {
+                    Button(action: {
+                        withAnimation {
+                            showMap = false
+                        }
+                    }) {
+                        Image(systemName: "chevron.left")
+                            .font(.title2)
+                            .foregroundColor(.blue)
+                            .padding(10)
+                            .background(Color(.systemBackground))
+                            .clipShape(Circle())
+                            .shadow(radius: 2)
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    
                     Spacer()
-                    CountyProgressView(county: county)
-                        .transition(.move(edge: .bottom))
-                        .padding()
                 }
             }
-        }
-        .onAppear {
-            loadCountyBoundaries()
-        }
-        .onChange(of: locationManager.userLocation) { newLocation in
-            if let location = newLocation {
-                updateRegion(for: location.coordinate)
-                updateCurrentCounty(for: location.coordinate)
-                progressManager.updateVisitedCells(for: location.coordinate)
+            .onAppear {
+                loadCountyBoundaries()
             }
+            .onChange(of: locationManager.userLocation) { newLocation in
+                if let location = newLocation {
+                    updateCurrentCounty(for: location.coordinate)
+                    progressManager.updateVisitedCells(for: location.coordinate)
+                }
+            }
+        } else {
+            // Home Page
+            HomePage(showMap: $showMap)
         }
     }
 
