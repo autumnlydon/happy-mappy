@@ -46,48 +46,71 @@ struct HomePage: View {
     @State private var showError = false
     @State private var errorMessage = ""
     
+    // Define our custom colors
+    private let pastelPink = Color(red: 255/255, green: 182/255, blue: 193/255)    // More vibrant pink
+    private let mutedBlue = Color(red: 137/255, green: 157/255, blue: 192/255)    // Deeper blue
+    private let textGray = Color(red: 128/255, green: 128/255, blue: 128/255)     // Solid gray
+    
     var body: some View {
-        VStack(spacing: 20) {
-            Text("Welcome to County Explorer")
-                .font(.largeTitle)
-                .fontWeight(.bold)
+        VStack(spacing: 25) {
+            Text("happy mappy")
+                .font(.system(size: 40, weight: .light))
+                .foregroundColor(mutedBlue)
+                .padding(.top, 40)
             
-            Text("Track your adventures across counties")
-                .font(.title2)
-                .foregroundColor(.gray)
+            Text("Your Journey, Your Story")
+                .font(.system(size: 20, weight: .light))
+                .foregroundColor(textGray)
             
             Image(systemName: "map.fill")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 100, height: 100)
-                .foregroundColor(.blue)
-                .padding(.vertical, 30)
+                .frame(width: 60, height: 60)
+                .foregroundColor(mutedBlue)
+                .padding(.vertical, 20)
             
             if !userState.isAuthenticated {
                 // Login Form
-                TextField("Email", text: $email)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .autocapitalization(.none)
-                    .padding(.horizontal)
-                
-                SecureField("Password", text: $password)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .padding(.horizontal)
-                
-                HStack(spacing: 20) {
-                    Button("Sign In") {
-                        login()
-                    }
-                    .buttonStyle(.borderedProminent)
+                VStack(spacing: 15) {
+                    TextField("Email", text: $email)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .autocapitalization(.none)
+                        .padding(.horizontal)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.white)
+                                .shadow(color: Color.gray.opacity(0.2), radius: 5, x: 0, y: 2)
+                        )
                     
-                    Button("Sign Up") {
-                        signUp()
+                    SecureField("Password", text: $password)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .padding(.horizontal)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.white)
+                                .shadow(color: Color.gray.opacity(0.2), radius: 5, x: 0, y: 2)
+                        )
+                    
+                    HStack(spacing: 20) {
+                        Button("Sign In") {
+                            login()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(mutedBlue)
+                        
+                        Button("Sign Up") {
+                            signUp()
+                        }
+                        .buttonStyle(.bordered)
+                        .foregroundColor(mutedBlue)
                     }
-                    .buttonStyle(.bordered)
+                    .disabled(isLoading)
                 }
-                .disabled(isLoading)
+                .padding(.vertical)
             } else {
-                Text("Explore counties, track visited areas,\nand discover new places!")
+                Text("Ready to explore new places?")
+                    .font(.system(size: 20, weight: .regular))
+                    .foregroundColor(textGray)
                     .multilineTextAlignment(.center)
                     .padding()
                 
@@ -101,20 +124,21 @@ struct HomePage: View {
                         .foregroundColor(.white)
                         .padding()
                         .frame(width: 200)
-                        .background(Color.blue)
-                        .cornerRadius(10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 15)
+                                .fill(mutedBlue)
+                        )
                 }
-                .padding(.top, 20)
                 
                 NavigationLink(destination: VisitedCountiesView(progressManager: progressManager)) {
                     Text("Track Exploration")
                         .font(.headline)
-                        .foregroundColor(.blue)
+                        .foregroundColor(mutedBlue)
                         .padding()
                         .frame(width: 200)
                         .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.blue, lineWidth: 2)
+                            RoundedRectangle(cornerRadius: 15)
+                                .stroke(mutedBlue, lineWidth: 2)
                         )
                 }
                 .padding(.top, 10)
@@ -122,10 +146,14 @@ struct HomePage: View {
                 Button("Sign Out") {
                     signOut()
                 }
+                .foregroundColor(textGray)
                 .padding(.top)
             }
+            
+            Spacer()
         }
         .padding()
+        .background(Color.white)
         .alert("Error", isPresented: $showError) {
             Button("OK") { }
         } message: {
