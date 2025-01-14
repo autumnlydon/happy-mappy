@@ -24,6 +24,65 @@ struct ProgressSection: View {
     }
 }
 
+struct StateProgressView: View {
+    let stateName: String
+    let progress: Double
+    let counties: [CountyProgress]
+    @State private var isExpanded = false
+    private let mutedBlue = Color(red: 137/255, green: 157/255, blue: 192/255)
+    private let textGray = Color(red: 128/255, green: 128/255, blue: 128/255)
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button(action: { isExpanded.toggle() }) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(stateName)
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(mutedBlue)
+                            
+                            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                                .foregroundColor(mutedBlue)
+                                .font(.system(size: 14, weight: .medium))
+                        }
+                        
+                        ProgressView(value: progress)
+                            .tint(mutedBlue)
+                        
+                        Text("\(Int(progress * 100))% Explored")
+                            .font(.system(size: 14, weight: .light))
+                            .foregroundColor(textGray)
+                    }
+                }
+            }
+            
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(counties.sorted(by: { $0.countyName < $1.countyName })) { county in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(county.countyName)
+                                .font(.system(size: 16, weight: .regular))
+                                .foregroundColor(mutedBlue)
+                            
+                            ProgressView(value: Double(county.visitedCellCount) / Double(county.totalCellCount))
+                                .tint(mutedBlue)
+                            
+                            Text("\(Int((Double(county.visitedCellCount) / Double(county.totalCellCount)) * 100))% Explored")
+                                .font(.system(size: 12, weight: .light))
+                                .foregroundColor(textGray)
+                        }
+                        .padding(.leading, 16)
+                    }
+                }
+                .padding(.top, 8)
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
+    }
+}
+
 struct VisitedCountiesView: View {
     @ObservedObject var progressManager: CountyProgressManager
     @State private var selectedSection = 0
@@ -92,16 +151,20 @@ struct VisitedCountiesView: View {
             .sorted { $0.countyName < $1.countyName }
     }
     
-    var stateProgress: [(state: String, progress: Double)] {
+    var stateProgressWithCounties: [(state: String, progress: Double, counties: [CountyProgress])] {
         // Group counties by state
         let stateGroups = Dictionary(grouping: progressManager.countyProgress.values) { $0.stateName }
         
-        // Calculate progress for each state
+        // Calculate progress for each state and include its counties
         return stateGroups.map { stateCode, counties in
             let totalCells = counties.reduce(0) { $0 + $1.totalCellCount }
             let visitedCells = counties.reduce(0) { $0 + $1.visitedCellCount }
             let progress = totalCells > 0 ? Double(visitedCells) / Double(totalCells) : 0
-            return (state: stateNames[stateCode] ?? stateCode, progress: progress)
+            return (
+                state: stateNames[stateCode] ?? stateCode,
+                progress: progress,
+                counties: counties.filter { $0.visitedCellCount > 0 }
+            )
         }
         .sorted { $0.state < $1.state }
     }
@@ -135,14 +198,20 @@ struct VisitedCountiesView: View {
                     }
                     
                     Section {
-                        if stateProgress.isEmpty {
+                        if stateProgressWithCounties.isEmpty {
                             Text("No states visited yet")
                                 .font(.system(size: 16, weight: .light))
                                 .foregroundColor(textGray)
                                 .padding(.vertical, 8)
                         } else {
-                            ForEach(stateProgress, id: \.state) { state in
-                                ProgressSection(title: state.state, progress: state.progress)
+                            ForEach(stateProgressWithCounties, id: \.state) { state in
+                                if !state.counties.isEmpty {
+                                    StateProgressView(
+                                        stateName: state.state,
+                                        progress: state.progress,
+                                        counties: state.counties
+                                    )
+                                }
                             }
                         }
                     } header: {
