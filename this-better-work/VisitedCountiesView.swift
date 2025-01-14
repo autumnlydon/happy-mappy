@@ -22,6 +22,7 @@ struct ProgressSection: View {
 
 struct VisitedCountiesView: View {
     @ObservedObject var progressManager: CountyProgressManager
+    @State private var selectedSection = 0
     
     // FIPS state codes to state names mapping
     private let stateNames: [String: String] = [
@@ -106,46 +107,63 @@ struct VisitedCountiesView: View {
     }
     
     var body: some View {
-        List {
-            Section(header: Text("Country Progress")) {
-                ProgressSection(title: "United States", progress: countryProgress)
+        VStack(spacing: 0) {
+            Picker("Section", selection: $selectedSection) {
+                Text("Country").tag(0)
+                Text("States").tag(1)
+                Text("Counties").tag(2)
             }
+            .pickerStyle(SegmentedPickerStyle())
+            .padding()
             
-            Section(header: Text("State Progress")) {
-                if stateProgress.isEmpty {
-                    Text("No states visited yet")
-                        .foregroundColor(.secondary)
-                } else {
-                    ForEach(stateProgress, id: \.state) { state in
-                        ProgressSection(title: state.state, progress: state.progress)
+            ScrollViewReader { proxy in
+                List {
+                    Section(header: Text("Country Progress").id(0)) {
+                        ProgressSection(title: "United States", progress: countryProgress)
+                    }
+                    
+                    Section(header: Text("State Progress").id(1)) {
+                        if stateProgress.isEmpty {
+                            Text("No states visited yet")
+                                .foregroundColor(.secondary)
+                        } else {
+                            ForEach(stateProgress, id: \.state) { state in
+                                ProgressSection(title: state.state, progress: state.progress)
+                            }
+                        }
+                    }
+                    
+                    Section(header: Text("County Progress").id(2)) {
+                        if visitedCounties.isEmpty {
+                            Text("No counties visited yet")
+                                .foregroundColor(.secondary)
+                        } else {
+                            ForEach(visitedCounties) { county in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("\(county.countyName), \(stateNames[county.stateName] ?? county.stateName)")
+                                        .font(.headline)
+                                    
+                                    ProgressView(value: Double(county.visitedCellCount) / Double(county.totalCellCount))
+                                        .tint(.blue)
+                                    
+                                    Text("\(Int((Double(county.visitedCellCount) / Double(county.totalCellCount)) * 100))% Explored")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
                     }
                 }
-            }
-            
-            Section(header: Text("County Progress")) {
-                if visitedCounties.isEmpty {
-                    Text("No counties visited yet")
-                        .foregroundColor(.secondary)
-                } else {
-                    ForEach(visitedCounties) { county in
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("\(county.countyName), \(stateNames[county.stateName] ?? county.stateName)")
-                                .font(.headline)
-                            
-                            ProgressView(value: Double(county.visitedCellCount) / Double(county.totalCellCount))
-                                .tint(.blue)
-                            
-                            Text("\(Int((Double(county.visitedCellCount) / Double(county.totalCellCount)) * 100))% Explored")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(.vertical, 4)
+                .listStyle(InsetGroupedListStyle())
+                .onChange(of: selectedSection) { newValue in
+                    withAnimation {
+                        proxy.scrollTo(newValue, anchor: .top)
                     }
                 }
             }
         }
         .navigationTitle("Exploration Progress")
-        .listStyle(InsetGroupedListStyle())
     }
 }
 
