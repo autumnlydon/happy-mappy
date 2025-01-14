@@ -47,112 +47,128 @@ struct HomePage: View {
     @State private var errorMessage = ""
     
     // Define our custom colors
-    private let pastelPink = Color(red: 255/255, green: 182/255, blue: 193/255)    // More vibrant pink
-    private let mutedBlue = Color(red: 137/255, green: 157/255, blue: 192/255)    // Deeper blue
-    private let textGray = Color(red: 128/255, green: 128/255, blue: 128/255)     // Solid gray
+    private let mutedBlue = Color(red: 137/255, green: 157/255, blue: 192/255)
+    private let textGray = Color(red: 128/255, green: 128/255, blue: 128/255)
     
     var body: some View {
-        VStack(spacing: 25) {
-            Text("happy mappy")
-                .font(.system(size: 40, weight: .light))
-                .foregroundColor(mutedBlue)
-                .padding(.top, 40)
-            
-            Text("Your Journey, Your Story")
-                .font(.system(size: 20, weight: .light))
-                .foregroundColor(textGray)
-            
-            Image(systemName: "map.fill")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 60, height: 60)
-                .foregroundColor(mutedBlue)
-                .padding(.vertical, 20)
+        VStack(spacing: 40) {
+            // App Logo and Title
+            VStack(spacing: 20) {
+                Image(systemName: "map.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 65, height: 65)
+                    .foregroundColor(mutedBlue)
+                    .background(
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 100, height: 100)
+                            .shadow(color: Color.black.opacity(0.1), radius: 10)
+                    )
+                    .padding(.top, 60)
+                
+                Text("happy mappy")
+                    .font(.system(size: 42, weight: .light))
+                    .foregroundColor(mutedBlue)
+                
+                Text("Your Journey, Your Story")
+                    .font(.system(size: 20, weight: .light))
+                    .foregroundColor(textGray)
+            }
+            .padding(.bottom, 20)
             
             if !userState.isAuthenticated {
-                // Login Form
-                VStack(spacing: 15) {
+                // Login Form with improved spacing
+                VStack(spacing: 25) {
                     TextField("Email", text: $email)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .autocapitalization(.none)
                         .padding(.horizontal)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(Color.white)
-                                .shadow(color: Color.gray.opacity(0.2), radius: 5, x: 0, y: 2)
-                        )
+                        .modifier(TextFieldModifier())
                     
                     SecureField("Password", text: $password)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .padding(.horizontal)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(Color.white)
-                                .shadow(color: Color.gray.opacity(0.2), radius: 5, x: 0, y: 2)
-                        )
+                        .modifier(TextFieldModifier())
                     
-                    HStack(spacing: 20) {
+                    HStack(spacing: 25) {
                         Button("Sign In") {
                             login()
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(mutedBlue)
+                        .buttonStyle(PrimaryButtonStyle())
                         
                         Button("Sign Up") {
                             signUp()
                         }
-                        .buttonStyle(.bordered)
-                        .foregroundColor(mutedBlue)
+                        .buttonStyle(SecondaryButtonStyle())
                     }
                     .disabled(isLoading)
                 }
-                .padding(.vertical)
+                .padding(.horizontal, 30)
             } else {
-                Text("Ready to explore new places?")
-                    .font(.system(size: 20, weight: .regular))
-                    .foregroundColor(textGray)
-                    .multilineTextAlignment(.center)
-                    .padding()
-                
-                Button(action: {
-                    withAnimation {
-                        showMap = true
-                    }
-                }) {
-                    Text("Start Exploring")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .padding()
-                        .frame(width: 200)
-                        .background(
-                            RoundedRectangle(cornerRadius: 15)
-                                .fill(mutedBlue)
-                        )
-                }
-                
-                NavigationLink(destination: VisitedCountiesView(progressManager: progressManager)) {
-                    Text("Track Exploration")
-                        .font(.headline)
+                VStack(spacing: 30) {
+                    Text("Where have you been?")
+                        .font(.system(size: 32, weight: .light))
                         .foregroundColor(mutedBlue)
-                        .padding()
-                        .frame(width: 200)
-                        .background(
-                            RoundedRectangle(cornerRadius: 15)
-                                .stroke(mutedBlue, lineWidth: 2)
-                        )
+                        .padding(.bottom, 5)
+                    
+                    Text("Keep track of places discovered,\nand counties explored")
+                        .font(.system(size: 18))
+                        .foregroundColor(textGray)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                        .padding(.bottom, 20)
+                    
+                    VStack(spacing: 15) {
+                        Button(action: {
+                            withAnimation {
+                                showMap = true
+                            }
+                        }) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "map")
+                                Text("Start Exploring")
+                            }
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(width: 250, height: 55)
+                            .background(
+                                RoundedRectangle(cornerRadius: 27.5)
+                                    .fill(mutedBlue)
+                                    .shadow(color: mutedBlue.opacity(0.3), radius: 8, y: 4)
+                            )
+                        }
+                        
+                        NavigationLink(destination: VisitedCountiesView(progressManager: progressManager)) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "chart.bar.fill")
+                                Text("Track Exploration")
+                            }
+                            .font(.headline)
+                            .foregroundColor(mutedBlue)
+                            .frame(width: 250, height: 55)
+                            .background(
+                                RoundedRectangle(cornerRadius: 27.5)
+                                    .stroke(mutedBlue, lineWidth: 2)
+                            )
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    Button(action: signOut) {
+                        Text("Sign Out")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(textGray)
+                    }
+                    .padding(.bottom, 30)
                 }
-                .padding(.top, 10)
-                
-                Button("Sign Out") {
-                    signOut()
-                }
-                .foregroundColor(textGray)
-                .padding(.top)
+                .padding(.top, 20)
+                .padding(.horizontal, 30)
             }
             
             Spacer()
         }
-        .padding()
         .background(Color.white)
         .alert("Error", isPresented: $showError) {
             Button("OK") { }
@@ -206,6 +222,52 @@ struct HomePage: View {
                 }
             }
         }
+    }
+}
+
+// Custom ViewModifiers for consistent styling
+struct TextFieldModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 15)
+                    .fill(Color.white)
+                    .shadow(color: Color.black.opacity(0.05), radius: 5, y: 2)
+            )
+    }
+}
+
+struct PrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.headline)
+            .foregroundColor(.white)
+            .padding(.horizontal, 30)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color(red: 137/255, green: 157/255, blue: 192/255))
+                    .shadow(color: Color.black.opacity(0.1), radius: 5, y: 2)
+            )
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.spring(), value: configuration.isPressed)
+    }
+}
+
+struct SecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.headline)
+            .foregroundColor(Color(red: 137/255, green: 157/255, blue: 192/255))
+            .padding(.horizontal, 30)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(Color(red: 137/255, green: 157/255, blue: 192/255), lineWidth: 2)
+            )
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.spring(), value: configuration.isPressed)
     }
 }
 
