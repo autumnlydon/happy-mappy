@@ -3,26 +3,32 @@ import SwiftUI
 struct ProgressSection: View {
     let title: String
     let progress: Double
+    private let mutedBlue = Color(red: 137/255, green: 157/255, blue: 192/255)
+    private let textGray = Color(red: 128/255, green: 128/255, blue: 128/255)
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.headline)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundColor(mutedBlue)
             
             ProgressView(value: progress)
-                .tint(.blue)
+                .tint(mutedBlue)
             
             Text("\(Int(progress * 100))% Explored")
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(.system(size: 14, weight: .light))
+                .foregroundColor(textGray)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
     }
 }
 
 struct VisitedCountiesView: View {
     @ObservedObject var progressManager: CountyProgressManager
     @State private var selectedSection = 0
+    private let mutedBlue = Color(red: 137/255, green: 157/255, blue: 192/255)
+    private let textGray = Color(red: 128/255, green: 128/255, blue: 128/255)
     
     // FIPS state codes to state names mapping
     private let stateNames: [String: String] = [
@@ -118,41 +124,64 @@ struct VisitedCountiesView: View {
             
             ScrollViewReader { proxy in
                 List {
-                    Section(header: Text("Country Progress").id(0)) {
+                    Section {
                         ProgressSection(title: "United States", progress: countryProgress)
+                    } header: {
+                        Text("Country Progress")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(mutedBlue)
+                            .textCase(nil)
+                            .id(0)
                     }
                     
-                    Section(header: Text("State Progress").id(1)) {
+                    Section {
                         if stateProgress.isEmpty {
                             Text("No states visited yet")
-                                .foregroundColor(.secondary)
+                                .font(.system(size: 16, weight: .light))
+                                .foregroundColor(textGray)
+                                .padding(.vertical, 8)
                         } else {
                             ForEach(stateProgress, id: \.state) { state in
                                 ProgressSection(title: state.state, progress: state.progress)
                             }
                         }
+                    } header: {
+                        Text("State Progress")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(mutedBlue)
+                            .textCase(nil)
+                            .id(1)
                     }
                     
-                    Section(header: Text("County Progress").id(2)) {
+                    Section {
                         if visitedCounties.isEmpty {
                             Text("No counties visited yet")
-                                .foregroundColor(.secondary)
+                                .font(.system(size: 16, weight: .light))
+                                .foregroundColor(textGray)
+                                .padding(.vertical, 8)
                         } else {
                             ForEach(visitedCounties) { county in
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text("\(county.countyName), \(stateNames[county.stateName] ?? county.stateName)")
-                                        .font(.headline)
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundColor(mutedBlue)
                                     
                                     ProgressView(value: Double(county.visitedCellCount) / Double(county.totalCellCount))
-                                        .tint(.blue)
+                                        .tint(mutedBlue)
                                     
                                     Text("\(Int((Double(county.visitedCellCount) / Double(county.totalCellCount)) * 100))% Explored")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .font(.system(size: 14, weight: .light))
+                                        .foregroundColor(textGray)
                                 }
-                                .padding(.vertical, 4)
+                                .padding(.vertical, 8)
                             }
                         }
+                    } header: {
+                        Text("County Progress")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(mutedBlue)
+                            .textCase(nil)
+                            .id(2)
                     }
                 }
                 .listStyle(InsetGroupedListStyle())
@@ -164,6 +193,7 @@ struct VisitedCountiesView: View {
             }
         }
         .navigationTitle("Exploration Progress")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
