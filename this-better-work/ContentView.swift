@@ -67,7 +67,7 @@ struct HomePage: View {
                     )
                     .padding(.top, 60)
                 
-                Text("happy mappy")
+                Text("yap map")
                     .font(.system(size: 42, weight: .light))
                     .foregroundColor(mutedBlue)
                 
