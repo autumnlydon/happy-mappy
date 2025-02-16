@@ -38,13 +38,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
 // Step 3: Define the ContentView struct
 struct HomePage: View {
     @Binding var showMap: Bool
-    @StateObject private var userState = UserState.shared
     @ObservedObject var progressManager: CountyProgressManager
-    @State private var email = ""
-    @State private var password = ""
-    @State private var isLoading = false
-    @State private var showError = false
-    @State private var errorMessage = ""
     
     // Define our custom colors
     private let mutedBlue = Color(red: 137/255, green: 157/255, blue: 192/255)
@@ -77,151 +71,59 @@ struct HomePage: View {
             }
             .padding(.bottom, 20)
             
-            if !userState.isAuthenticated {
-                // Login Form with improved spacing
-                VStack(spacing: 25) {
-                    TextField("Email", text: $email)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .autocapitalization(.none)
-                        .padding(.horizontal)
-                        .modifier(TextFieldModifier())
-                    
-                    SecureField("Password", text: $password)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .padding(.horizontal)
-                        .modifier(TextFieldModifier())
-                    
-                    HStack(spacing: 25) {
-                        Button("Sign In") {
-                            login()
+            VStack(spacing: 30) {
+                Text("Where have you been?")
+                    .font(.system(size: 32, weight: .light))
+                    .foregroundColor(mutedBlue)
+                    .padding(.bottom, 5)
+                
+                Text("Keep track of places discovered,\nand counties explored")
+                    .font(.system(size: 18))
+                    .foregroundColor(textGray)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
+                    .padding(.bottom, 20)
+                
+                VStack(spacing: 15) {
+                    Button(action: {
+                        withAnimation {
+                            showMap = true
                         }
-                        .buttonStyle(PrimaryButtonStyle())
-                        
-                        Button("Sign Up") {
-                            signUp()
+                    }) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "map")
+                            Text("Start Exploring")
                         }
-                        .buttonStyle(SecondaryButtonStyle())
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(width: 250, height: 55)
+                        .background(
+                            RoundedRectangle(cornerRadius: 27.5)
+                                .fill(mutedBlue)
+                                .shadow(color: mutedBlue.opacity(0.3), radius: 8, y: 4)
+                        )
                     }
-                    .disabled(isLoading)
-                }
-                .padding(.horizontal, 30)
-            } else {
-                VStack(spacing: 30) {
-                    Text("Where have you been?")
-                        .font(.system(size: 32, weight: .light))
+                    
+                    NavigationLink(destination: VisitedCountiesView(progressManager: progressManager)) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "chart.bar.fill")
+                            Text("Track Exploration")
+                        }
+                        .font(.headline)
                         .foregroundColor(mutedBlue)
-                        .padding(.bottom, 5)
-                    
-                    Text("Keep track of places discovered,\nand counties explored")
-                        .font(.system(size: 18))
-                        .foregroundColor(textGray)
-                        .multilineTextAlignment(.center)
-                        .lineSpacing(4)
-                        .padding(.bottom, 20)
-                    
-                    VStack(spacing: 15) {
-                        Button(action: {
-                            withAnimation {
-                                showMap = true
-                            }
-                        }) {
-                            HStack(spacing: 12) {
-                                Image(systemName: "map")
-                                Text("Start Exploring")
-                            }
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(width: 250, height: 55)
-                            .background(
-                                RoundedRectangle(cornerRadius: 27.5)
-                                    .fill(mutedBlue)
-                                    .shadow(color: mutedBlue.opacity(0.3), radius: 8, y: 4)
-                            )
-                        }
-                        
-                        NavigationLink(destination: VisitedCountiesView(progressManager: progressManager)) {
-                            HStack(spacing: 12) {
-                                Image(systemName: "chart.bar.fill")
-                                Text("Track Exploration")
-                            }
-                            .font(.headline)
-                            .foregroundColor(mutedBlue)
-                            .frame(width: 250, height: 55)
-                            .background(
-                                RoundedRectangle(cornerRadius: 27.5)
-                                    .stroke(mutedBlue, lineWidth: 2)
-                            )
-                        }
+                        .frame(width: 250, height: 55)
+                        .background(
+                            RoundedRectangle(cornerRadius: 27.5)
+                                .stroke(mutedBlue, lineWidth: 2)
+                        )
                     }
-                    
-                    Spacer()
-                    
-                    Button(action: signOut) {
-                        Text("Sign Out")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(textGray)
-                    }
-                    .padding(.bottom, 30)
                 }
-                .padding(.top, 20)
-                .padding(.horizontal, 30)
             }
+            .padding(.horizontal, 30)
             
             Spacer()
         }
         .background(Color.white)
-        .alert("Error", isPresented: $showError) {
-            Button("OK") { }
-        } message: {
-            Text(errorMessage)
-        }
-    }
-    
-    private func login() {
-        isLoading = true
-        Task {
-            do {
-                try await userState.signIn(email: email, password: password)
-            } catch {
-                await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    showError = true
-                }
-            }
-            await MainActor.run {
-                isLoading = false
-            }
-        }
-    }
-    
-    private func signUp() {
-        isLoading = true
-        Task {
-            do {
-                try await userState.signUp(email: email, password: password)
-            } catch {
-                await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    showError = true
-                }
-            }
-            await MainActor.run {
-                isLoading = false
-            }
-        }
-    }
-    
-    private func signOut() {
-        Task {
-            do {
-                try await userState.signOut()
-            } catch {
-                await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    showError = true
-                }
-            }
-        }
     }
 }
 
@@ -318,7 +220,7 @@ struct ContentView: View {
                             }) {
                                 Image(systemName: "chevron.left")
                                     .font(.title2)
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(Color(red: 137/255, green: 157/255, blue: 192/255))
                                     .padding(10)
                                     .background(Color(.systemBackground))
                                     .clipShape(Circle())
@@ -330,7 +232,7 @@ struct ContentView: View {
                             NavigationLink(destination: VisitedCountiesView(progressManager: progressManager)) {
                                 Image(systemName: "list.bullet")
                                     .font(.title2)
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(Color(red: 137/255, green: 157/255, blue: 192/255))
                                     .padding(10)
                                     .background(Color(.systemBackground))
                                     .clipShape(Circle())
