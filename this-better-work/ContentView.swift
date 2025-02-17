@@ -65,7 +65,7 @@ struct HomePage: View {
                     .font(.system(size: 42, weight: .light))
                     .foregroundColor(mutedBlue)
                 
-                Text("Your Journey, Your Story")
+                Text("Get out of the house, and explore")
                     .font(.system(size: 20, weight: .light))
                     .foregroundColor(textGray)
             }
@@ -77,7 +77,7 @@ struct HomePage: View {
                     .foregroundColor(mutedBlue)
                     .padding(.bottom, 5)
                 
-                Text("Keep track of places discovered,\nand counties explored")
+                Text("Keep track of places discovered,\nand counties explored, and celebrate the fact that you left the house!")
                     .font(.system(size: 18))
                     .foregroundColor(textGray)
                     .multilineTextAlignment(.center)
